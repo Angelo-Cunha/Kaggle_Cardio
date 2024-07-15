@@ -1,0 +1,198 @@
+---
+title: "Trabalho de Conclusão do Curso de Microeconometria Turma 2018"
+subtitle: "Análise de Dados Cardiológicos"
+author: "Angelo Antonio Paula da Cunha"
+date: ""
+output: pdf_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+```
+
+
+# Descrição do Problema
+
+O dataset usado neste trabalho consiste em um conjunto de dados cardiológicos contento informações dos pacientes. Aqui temos informações como Idade, Altura, Peso, Gênero, Pressão Arterial Sistólica e Diastólica, Colesterol, Glicose, Ingestão de Álcool, Fumante, Atividade Física e Presença ou Ausência de doença cardiovascular. Através desses dados busco responder, através de um modelo de regressão linear e um quantil, os determinantes do peso dos indivíduos.   
+
+Primeiramente vamos obter os dados que se encontram no site: https://www.kaggle.com/sulianova/cardiovascular-disease-dataset
+
+# Dados e Manipulação
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+library(tidyverse)    
+library(quantreg)     
+library(cowplot)
+library(corrplot)
+
+cardio = read.csv2("cardio.csv", header = TRUE, sep = ";", dec=".")
+
+```
+
+Aqui vamos criar uma variável que será representada como idade por anos.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+cardio<-mutate(cardio, age_year = age / 365)
+
+```
+
+# Análise da Base de Dados
+Antes de fazer o modelo é interessante a análise descritiva e exploratória dos dados. Nesse sentido será exposto aqui a análise das variáveis do conjunto. 
+Começamos pelas médias das variáveis: Weight, Height, ap_hi e pa_lo. A média de idade é de 53 anos, peso dos paciêntes é de 74.20 quilos, da altura 164.35 cm, pressão Máx foi de 128.81 e da pressão Min de 96.63.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+mean(cardio$height)
+mean(cardio$weight)
+mean(cardio$ap_hi)
+mean(cardio$ap_lo)
+mean(cardio$age_year)
+
+```
+
+Para melhorar a análise das medidas descritivas será feito um gráfico boxplot para melhro vizualizar a disperção dos dados.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+plot.wei = ggplot(cardio, aes(y = weight)) +
+  geom_boxplot()
+
+plot.hei = ggplot(cardio, aes(y = height)) +
+  geom_boxplot()
+
+plot.aphi = ggplot(cardio, aes(y = ap_hi)) +
+  geom_boxplot()
+
+plot.aplo = ggplot(cardio, aes(y = ap_lo)) +
+  geom_boxplot()
+
+plot.age = ggplot(cardio, aes(y = age_year)) +
+  geom_boxplot()
+
+plot_grid(plot.wei, plot.hei,plot.aphi, plot.aplo, plot.age, labels = "AUTO")
+
+
+```
+Podemos notar nos gráficos que rpincipalmente nas variáveis de pressão existem alguns pontos extremos, ainda mais quando essas variáveis se tratam de pressão arterial e vemos alguns valores bem altos.
+
+Outra análise a ser feita será da frequência de gênero dos dados. Onde podemos observar que 1 = Mulher e 2 = Homem. Assim pelo resultado da tabela de frequência temos 65% dos paciêntes mulheres e 35% homens.
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+count.gender = table(as.factor(cardio$gender))    
+count.gender
+
+fs.gender = round(count.gender/sum(count.gender)*100)           
+fs.gender
+
+ggplot(cardio, aes(x = gender)) + 
+  geom_histogram(aes(y = stat(count.gender) / sum(count.gender)), bins = 2, color="red") +
+    scale_y_continuous(labels = scales::percent)+
+      labs(title = 'Tabela Frenquência por Gênero',
+       y = 'Frequência', x = 'Gênero')
+
+```
+
+Aqui será análisada a variável cholesterol. Podemos observar que 75% dos paciêntes têm cholesterol do tipo 1, 14% do tipo 2 e 12% do tipo 3. 
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+count.cholesterol=table(as.factor(cardio$cholesterol))
+count.cholesterol
+
+fs.cholesterol = round(count.cholesterol/sum(count.cholesterol)*100)
+fs.cholesterol
+
+ggplot(cardio, aes(x = cholesterol)) + 
+  geom_histogram(aes(y = stat(count.cholesterol) / sum(count.cholesterol)), bins = 3, color="red") +
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = 'Tabela Frenquência por Tipo de Cholesterol',
+       y = 'Frequência', x = 'Tipos de Cholesterol')
+
+```
+
+Outra variável que investigaremos é a Glicose (gluc). Observamos que 85% dos pacientes tem diabetes do tipo 1.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+count.gluc=table(as.factor(cardio$gluc))
+count.gluc
+
+fs.gluc = round(count.gluc/sum(count.gluc)*100)
+fs.gluc
+
+ggplot(cardio, aes(x = gluc)) + 
+  geom_histogram(aes(y = stat(count.gluc) / sum(count.gluc)), bins = 3, color="red") +
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = 'Tabela Frenquência por Tipo de Glicose',
+       y = 'Frequência', x = 'Tipos de Glicose')
+
+```
+
+Na análise do alcool, vemos pelo gráfico que apenas 5% dos paciêntes ingerem alcool.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+count.alco=table(as.factor(cardio$alco))
+count.alco
+
+fs.alco = round(count.alco/sum(count.alco)*100)
+fs.alco
+
+ggplot(cardio, aes(x = alco)) + 
+  geom_histogram(aes(y = stat(count.alco) / sum(count.alco)), bins = 2, color="red") +
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = 'Tabela Frenquência Ingestores de Alcool',
+       y = 'Frequência', x = 'Ingestão de Alcool')
+
+
+```
+
+# Algumas Correlações
+Afim de saber mais sobre as relações entre as variáveis aqui seram feitas algumas correlações de variáves explicativas com a nossa variável dependente.
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+corrplot(cor(cardio), method ='number')
+
+```
+Observamos que nossa variável dependente apresenta maior grau de correlação positiva com as varipaveis height (0.29), cardio(0.18) e gender(0.16).
+
+# Modelo de Regressão Múltipla
+O primeiro modelo a ser usado será o de regressão múltipla, onde vamos observar as variáveis que mais impactam no peso dos pacientes. 
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+lm_cardio<-lm(weight~height+cholesterol+gluc+smoke+alco+active+age_year,data=cardio)
+summary(lm_cardio)
+```
+Pelo resultado da regressão observamos que a única variável que não é estatisticamente significante é smoke. O intercepto foi de -22.96, as variáveis Height e age_year foram de, respectivamente, 0.5240 e 0.1167 o que nos permite interpretar que em média o peso aumenta com a altura e com a maior idade dos indivíduos. As outras variáveis por serem binárias nos permite uma interpretação de por exemplo: o indivíduo que apresenta Cholesterol terá aumento de em média 2.6343 no seu peso. Vale chamar atenção que a única variável que representa redução de peso é quando o indivíduo pratica atividade fisíca. 
+
+# Modelo de Regressão Quantílica
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+cardio_rq<-rq(lm_cardio, tau = c(0.25,0.75), data=cardio)
+summary(cardio_rq)
+
+
+```
+Os resultados da regressão quantil não são muito diferentes da regressão multipla. As variáveis continuaram com os sinais de impacto positivo, de uamento do peso.
+
+# Gráfico dos Resultados
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width="1\\linewidth", warning=FALSE, message=FALSE, size='small'}
+
+cardio_rqsq<-rq(lm_cardio, tau = seq(0.05, 0.95, by = 0.05), data=cardio)
+cardio_rqs<-summary(cardio_rqsq)
+plot(cardio_rqs)
+
+```
+
